@@ -429,12 +429,12 @@
 
     <!-- SCRIPT -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         // Configurazione
-        const manualConfig = { apiKey: "AIzaSyAh6TX5OhGoGSYLnK2fgxv5qqkQStL81f4", authDomain: "booking-redazioni-cb450.firebaseapp.com", projectId: "booking-redazioni-cb450", storageBucket: "booking-redazioni-cb450.firebasestorage.app", messagingSenderId: "201284623978", appId: "1:201284623978:web:0f7b3c93a2993da9883413", measurementId: "G-CEY9K09ZQY" };
+        const manualConfig = { apiKey: "AIzaSyDjIiWYQ97_4tlSnZbp1lWah4xc-5s4P4M", authDomain: "producionsuitefdl.firebaseapp.com", projectId: "producionsuitefdl", storageBucket: "producionsuitefdl.firebasestorage.app", messagingSenderId: "754157390371", appId: "1:754157390371:web:055502860847c839fabf96", measurementId: "G-3ND6BBGKE8" };
         let firebaseConfig, db, auth, isFirebaseActive = false;
 
         try {

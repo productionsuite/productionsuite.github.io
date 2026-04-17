@@ -1,0 +1,7 @@
+serviceAccountKey.json
+booking-redazioni-dump-*.json
+node_modules/
+package.json
+package-lock.json
+dump-tool.html
+import-to-firebase.js
