@@ -290,6 +290,12 @@
                 <button class="btn btn-secondary" onclick="openEditingArchive()">📂 Archivio Storico</button>
             </div>
         </header>
+        <div style="display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap; align-items:center;">
+            <span style="font-size:11px; color:#555; font-weight:700; letter-spacing:1px; margin-right:4px;">MOSTRA:</span>
+            <button id="eq-filter-queue" onclick="toggleEQFilter('editing_queue')" style="height:28px; font-size:10px; padding:0 14px; border-radius:20px; border:1px solid rgba(239,68,68,0.5); background:rgba(239,68,68,0.15); color:#f87171; font-weight:700; letter-spacing:1px; cursor:pointer; transition:all 0.2s;">● IN CODA</button>
+            <button id="eq-filter-waiting" onclick="toggleEQFilter('waiting')" style="height:28px; font-size:10px; padding:0 14px; border-radius:20px; border:1px solid rgba(245,158,11,0.5); background:rgba(245,158,11,0.15); color:#fbbf24; font-weight:700; letter-spacing:1px; cursor:pointer; transition:all 0.2s;">● IN ATTESA</button>
+            <button id="eq-filter-ready" onclick="toggleEQFilter('ready')" style="height:28px; font-size:10px; padding:0 14px; border-radius:20px; border:1px solid rgba(16,185,129,0.5); background:rgba(16,185,129,0.15); color:#34d399; font-weight:700; letter-spacing:1px; cursor:pointer; transition:all 0.2s;">● PRONTO</button>
+        </div>
         <div id="editing-list"></div>
     </div>
 
@@ -720,6 +726,26 @@
         };
 
         // Editing Queue (NEW VISUALS)
+        window.EQ_FILTERS = { editing_queue: true, waiting: true, ready: true };
+
+        const EQ_BTN_CFG = {
+            editing_queue: { id: 'eq-filter-queue', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.5)', color: '#f87171' },
+            waiting:        { id: 'eq-filter-waiting', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.5)', color: '#fbbf24' },
+            ready:          { id: 'eq-filter-ready', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.5)', color: '#34d399' }
+        };
+
+        window.toggleEQFilter = (status) => {
+            window.EQ_FILTERS[status] = !window.EQ_FILTERS[status];
+            const btn = document.getElementById(EQ_BTN_CFG[status].id);
+            const cfg = EQ_BTN_CFG[status];
+            if (window.EQ_FILTERS[status]) {
+                btn.style.background = cfg.bg; btn.style.borderColor = cfg.border; btn.style.color = cfg.color; btn.style.opacity = '1';
+            } else {
+                btn.style.background = 'rgba(255,255,255,0.03)'; btn.style.borderColor = 'rgba(255,255,255,0.08)'; btn.style.color = '#444'; btn.style.opacity = '0.55';
+            }
+            renderEditingQueue();
+        };
+
         window.openEditingQueue = () => { switchView('editing-queue-view'); renderEditingQueue(); };
         function renderEditingQueue() {
             const container = document.getElementById('editing-list'); container.innerHTML = '';
@@ -745,14 +771,28 @@
             });
 
             allItems.sort((a, b) => {
-                const dateA = a.info.movedToEditingAt || a.info.updatedAt || '0';
-                const dateB = b.info.movedToEditingAt || b.info.updatedAt || '0';
-                return new Date(dateB) - new Date(dateA);
+                // Primary: recording date descending (most recent first); null dates (manual) last
+                const dA = a.date || '0000-00-00';
+                const dB = b.date || '0000-00-00';
+                if (dA !== dB) return dB.localeCompare(dA);
+                // Secondary: queue timestamp descending
+                const tsA = a.info.movedToEditingAt || a.info.updatedAt || '0';
+                const tsB = b.info.movedToEditingAt || b.info.updatedAt || '0';
+                return new Date(tsB) - new Date(tsA);
             });
 
-            if (allItems.length === 0) { container.innerHTML = '<div style="text-align:center; opacity:0.5; padding:80px; font-size:14px; color:#555;">Nessun lavoro in coda.</div>'; return; }
-            
-            allItems.forEach(item => {
+            const filteredItems = allItems.filter(item => {
+                if (item.allocId === 'manual_jobs') return true;
+                const s = item.info.status;
+                if (item.isRecover || s === 'editing_queue') return window.EQ_FILTERS.editing_queue;
+                if (s === 'waiting') return window.EQ_FILTERS.waiting;
+                if (s === 'ready') return window.EQ_FILTERS.ready;
+                return true;
+            });
+
+            if (filteredItems.length === 0) { container.innerHTML = '<div style="text-align:center; opacity:0.5; padding:80px; font-size:14px; color:#555;">Nessun lavoro in coda.</div>'; return; }
+
+            filteredItems.forEach(item => {
                 let st = { label: 'In Lavorazione', glow: 'status-glow-queue', text: 'IN CODA' };
                 if(item.isRecover) st = { label: 'Non Processato', glow: 'status-glow-queue', text: 'DA RECUPERARE' };
                 else if(item.info.status === 'waiting') st = { label: 'In Attesa', glow: 'status-glow-waiting', text: 'IN ATTESA' };
