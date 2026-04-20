@@ -184,6 +184,65 @@
             .note-header { display: none; }
             .note-item { grid-template-columns: 1fr; gap: 12px; padding: 20px; border: 1px solid var(--border-glass); border-radius: 12px; margin-bottom: 16px; }
         }
+
+        /* ─── MOBILE ────────────────────────────────────────────────── */
+        @media (max-width: 768px) {
+            /* View layout */
+            .view { padding: 12px 16px 32px 16px; }
+            #login-view { padding: 20px; }
+
+            /* Login */
+            .login-card { padding: 32px 24px; }
+
+            /* Dashboard header */
+            #dashboard-view > header {
+                flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 24px;
+            }
+            #dashboard-view > header > div:last-child { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+
+            /* Admin panel */
+            #admin-tools > div:last-child {
+                grid-template-columns: 1fr !important;
+            }
+            #admin-tools > div:first-child { flex-direction: column; align-items: flex-start; gap: 12px; }
+            #admin-tools > div:first-child > div { flex-wrap: wrap; }
+
+            /* Dashboard grid */
+            .grid-container { grid-template-columns: 1fr; gap: 16px; margin-top: 20px; }
+
+            /* Slots view */
+            #slots-view > header { flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+            #slots-view > header > div:last-child { text-align: left; }
+
+            /* Slot items */
+            .slot-item { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+            .slot-time { font-size: 13px; width: 60px; }
+
+            /* Editing queue header */
+            #editing-queue-view > header {
+                flex-direction: column; align-items: flex-start; gap: 12px; margin-bottom: 20px;
+            }
+            #editing-queue-view > header > div:first-child h1 { font-size: 22px; }
+            #editing-queue-view > header > div:last-child { width: 100%; justify-content: flex-start; }
+
+            /* Edit items */
+            .edit-item-new { padding: 16px; margin-bottom: 16px; }
+            .job-title { font-size: 16px; }
+            .job-date { font-size: 13px; display: block; margin-left: 0; margin-top: 2px; }
+
+            /* Modals */
+            .modal-box { padding: 24px 20px; border-radius: 16px; }
+            .modal-box > div:first-child h3 { font-size: 18px; }
+            /* Collassa le griglie a 2 colonne */
+            .modal-box [style*="grid-template-columns: 1fr 1fr"] {
+                display: flex !important; flex-direction: column; gap: 0 !important;
+            }
+
+            /* Archive / notes header */
+            #editing-archive-view > header,
+            #archive-view > header,
+            #production-notes-view > header { margin-bottom: 16px; }
+        }
     </style>
 </head>
 <body>

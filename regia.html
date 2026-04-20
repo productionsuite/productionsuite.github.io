@@ -100,18 +100,65 @@
 
         .empty-state { text-align: center; padding: 100px; font-size: 32px; color: #555; font-weight: 600; }
 
+        /* DAY NAVIGATION */
+        .date-nav { display: flex; align-items: center; gap: 16px; }
+        .day-arrow {
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+            color: white; width: 44px; height: 44px; border-radius: 50%; font-size: 22px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s; flex-shrink: 0;
+        }
+        .day-arrow:hover { background: rgba(255,255,255,0.14); }
+        .header-date { font-size: 22px; color: var(--text-secondary); font-weight: 600; min-width: 260px; text-align: center; }
+        .day-badge { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; padding: 2px 10px; border-radius: 20px; margin-top: 4px; display: inline-block; }
+        .day-badge.today { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .day-badge.other { background: rgba(255,255,255,0.06); color: #666; }
+
         /* Nascondi scrollbar per un look più pulito sullo schermo TV */
         ::-webkit-scrollbar { display: none; }
+
+        /* MOBILE */
+        @media (max-width: 768px) {
+            header { padding: 14px 16px; flex-wrap: wrap; gap: 10px; }
+            .header-title { font-size: 22px; }
+            .header-date { font-size: 13px; min-width: 0; }
+            .day-arrow { width: 34px; height: 34px; font-size: 16px; }
+            .live-indicator { font-size: 14px; }
+            .dot { width: 10px; height: 10px; }
+            .list-container { padding: 12px 16px; overflow-y: auto; }
+            .list-header { display: none; }
+            .note-item {
+                display: flex; flex-direction: column; gap: 8px;
+                padding: 14px 16px;
+                border: 1px solid var(--border-glass);
+                border-left: 3px solid #3b82f6;
+                border-radius: 12px; margin-bottom: 12px;
+            }
+            .time-col { font-size: 22px; }
+            .guest-name { font-size: 20px; }
+            .company-name { font-size: 14px; }
+            .format-name { font-size: 15px; }
+            .team-tag { font-size: 11px; padding: 2px 8px; }
+            .jour-name { font-size: 14px; }
+            .setup-tag { font-size: 13px; padding: 6px 10px; display: inline-block; }
+            .prod-note { font-size: 13px; }
+            .empty-state { padding: 60px 20px; font-size: 20px; }
+        }
     </style>
 </head>
 <body>
 
     <header>
-        <div>
-            <div class="header-title">REGIA STUDIO</div>
-            <div class="header-date" id="display-date">Caricamento...</div>
+        <div class="header-title">REGIA STUDIO</div>
+        <div class="date-nav">
+            <button class="day-arrow" onclick="changeDay(-1)" title="Giorno precedente">‹</button>
+            <div style="text-align:center;">
+                <div class="header-date" id="display-date">Caricamento...</div>
+                <div id="day-badge" class="day-badge today">OGGI</div>
+            </div>
+            <button class="day-arrow" onclick="changeDay(1)" title="Giorno successivo">›</button>
         </div>
-        <div class="live-indicator">
+        <div class="live-indicator" id="live-indicator">
             <div class="dot"></div> ON AIR
         </div>
     </header>
@@ -176,19 +223,47 @@
             users: {}
         };
 
-        // Funzione Data
-        function getLocalDateString() {
-            const d = new Date();
-            const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' });
-            return fmt.format(d);
+        let dayOffset = 0;
+
+        // Restituisce la data in formato YYYY-MM-DD con offset in timezone Rome
+        function getDateStringWithOffset(offset) {
+            const todayStr = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit'
+            }).format(new Date());
+            const [y, m, d] = todayStr.split('-').map(Number);
+            const base = new Date(y, m - 1, d);
+            base.setDate(base.getDate() + offset);
+            return new Intl.DateTimeFormat('en-CA').format(base);
         }
 
         function updateHeaderDate() {
-            const d = new Date();
+            // Calcola la data del giorno visualizzato
+            const dateStr = getDateStringWithOffset(dayOffset);
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const target = new Date(y, m - 1, d);
             const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-            let testata = d.toLocaleDateString('it-IT', options);
+            let testata = target.toLocaleDateString('it-IT', options);
             document.getElementById('display-date').innerText = testata.charAt(0).toUpperCase() + testata.slice(1);
+
+            const badge = document.getElementById('day-badge');
+            const liveEl = document.getElementById('live-indicator');
+            if (dayOffset === 0) {
+                badge.textContent = 'OGGI'; badge.className = 'day-badge today';
+                liveEl.style.visibility = 'visible';
+            } else if (dayOffset < 0) {
+                badge.textContent = `${Math.abs(dayOffset)} GIORNO${Math.abs(dayOffset) > 1 ? 'I' : ''} FA`;
+                badge.className = 'day-badge other'; liveEl.style.visibility = 'hidden';
+            } else {
+                badge.textContent = `TRA ${dayOffset} GIORNO${dayOffset > 1 ? 'I' : ''}`;
+                badge.className = 'day-badge other'; liveEl.style.visibility = 'hidden';
+            }
         }
+
+        window.changeDay = (delta) => {
+            dayOffset += delta;
+            updateHeaderDate();
+            renderMonitor();
+        };
 
         // Listeners
         function startRealtimeListeners() {
@@ -223,9 +298,9 @@
         // Render principale
         function renderMonitor() {
             const container = document.getElementById('monitor-list');
-            const todayStr = getLocalDateString(); 
-            
-            // Filtra solo oggi
+            const todayStr = getDateStringWithOffset(dayOffset);
+
+            // Filtra il giorno visualizzato
             const todayAllocations = STATE.allocations.filter(a => a.date === todayStr && !a.archived);
             let allSlots = [];
 

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Migration Tool — vecchio → nuovo DB</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: monospace; background: #0d1117; color: #e6edf3; padding: 40px; max-width: 900px; margin: 0 auto; }
+        h1 { color: #10b981; margin-bottom: 4px; }
+        .subtitle { color: #6e7681; font-size: 14px; margin-bottom: 32px; }
+        .db-row { display: flex; gap: 16px; margin-bottom: 24px; }
+        .db-card { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+        .db-card h3 { margin: 0 0 6px 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+        .db-card.old h3 { color: #f59e0b; }
+        .db-card.new h3 { color: #10b981; }
+        .db-card p { margin: 0; font-size: 12px; color: #8b949e; }
+        .arrow { display: flex; align-items: center; color: #58a6ff; font-size: 24px; padding-top: 16px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        button { border: none; padding: 12px 24px; font-size: 14px; font-weight: 700; border-radius: 6px; cursor: pointer; font-family: monospace; transition: opacity 0.2s; }
+        button:disabled { opacity: 0.35; cursor: not-allowed; }
+        #btn-run { background: #10b981; color: #000; }
+        #btn-run:hover:not(:disabled) { background: #059669; }
+        #btn-clear { background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+        .progress-bar-wrap { background: #21262d; border-radius: 4px; height: 6px; margin-bottom: 20px; overflow: hidden; display: none; }
+        .progress-bar { height: 100%; background: #10b981; width: 0%; transition: width 0.3s; }
+        .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; display: none; }
+        .summary-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 12px; text-align: center; }
+        .summary-card .num { font-size: 28px; font-weight: 900; }
+        .summary-card .lbl { font-size: 11px; color: #6e7681; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+        .num.green { color: #10b981; } .num.yellow { color: #f59e0b; } .num.blue { color: #58a6ff; } .num.red { color: #ef4444; }
+        #log { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; min-height: 240px; white-space: pre-wrap; font-size: 13px; line-height: 1.7; overflow-y: auto; max-height: 500px; }
+        .ok { color: #10b981; } .warn { color: #f59e0b; } .err { color: #ef4444; } .info { color: #58a6ff; } .dim { color: #484f58; }
+        .section { color: #c9d1d9; font-weight: 700; border-bottom: 1px solid #21262d; display: block; margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <h1>Migration Tool</h1>
+    <p class="subtitle">Sincronizza i dati mancanti dal vecchio al nuovo progetto Firebase. I documenti già presenti nel nuovo DB non vengono toccati.</p>
+
+    <div class="db-row">
+        <div class="db-card old">
+            <h3>Sorgente (vecchio)</h3>
+            <p>booking-redazioni-cb450</p>
+        </div>
+        <div class="arrow">→</div>
+        <div class="db-card new">
+            <h3>Destinazione (nuovo)</h3>
+            <p>producionsuitefdl</p>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="btn-run" onclick="runMigration()">▶ Avvia Sincronizzazione</button>
+        <button id="btn-clear" onclick="clearLog()">Pulisci Log</button>
+    </div>
+
+    <div class="progress-bar-wrap" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+
+    <div class="summary-grid" id="summary-grid">
+        <div class="summary-card"><div class="num green" id="s-copied">0</div><div class="lbl">Copiati</div></div>
+        <div class="summary-card"><div class="num yellow" id="s-skipped">0</div><div class="lbl">Già presenti</div></div>
+        <div class="summary-card"><div class="num blue" id="s-merged">0</div><div class="lbl">Slot uniti</div></div>
+        <div class="summary-card"><div class="num red" id="s-errors">0</div><div class="lbl">Errori</div></div>
+    </div>
+
+    <div id="log">In attesa di avvio...\n</div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+
+        const OLD_CONFIG = {
+            apiKey: "AIzaSyAh6TX5OhGoGSYLnK2fgxv5qqkQStL81f4",
+            authDomain: "booking-redazioni-cb450.firebaseapp.com",
+            projectId: "booking-redazioni-cb450",
+            storageBucket: "booking-redazioni-cb450.firebasestorage.app",
+            messagingSenderId: "201284623978",
+            appId: "1:201284623978:web:0f7b3c93a2993da9883413"
+        };
+
+        const NEW_CONFIG = {
+            apiKey: "AIzaSyDjIiWYQ97_4tlSnZbp1lWah4xc-5s4P4M",
+            authDomain: "producionsuitefdl.firebaseapp.com",
+            projectId: "producionsuitefdl",
+            storageBucket: "producionsuitefdl.firebasestorage.app",
+            messagingSenderId: "754157390371",
+            appId: "1:754157390371:web:055502860847c839fabf96"
+        };
+
+        // --- Log helpers ---
+        const logEl = () => document.getElementById('log');
+        function log(msg, type = '') {
+            const el = logEl();
+            const span = document.createElement('span');
+            span.className = type;
+            span.textContent = msg + '\n';
+            el.appendChild(span);
+            el.scrollTop = el.scrollHeight;
+        }
+        function logSection(title) {
+            const el = logEl();
+            const span = document.createElement('span');
+            span.className = 'section';
+            span.textContent = '\n── ' + title + ' ──────────────────────────\n';
+            el.appendChild(span);
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function setProgress(pct) {
+            document.getElementById('progress-bar').style.width = pct + '%';
+        }
+
+        // --- Stats ---
+        let stats = { copied: 0, skipped: 0, merged: 0, errors: 0 };
+        function updateStats() {
+            document.getElementById('s-copied').textContent = stats.copied;
+            document.getElementById('s-skipped').textContent = stats.skipped;
+            document.getElementById('s-merged').textContent = stats.merged;
+            document.getElementById('s-errors').textContent = stats.errors;
+        }
+
+        window.clearLog = () => {
+            logEl().innerHTML = 'In attesa di avvio...\n';
+            document.getElementById('progress-wrap').style.display = 'none';
+            document.getElementById('summary-grid').style.display = 'none';
+            setProgress(0);
+        };
+
+        window.runMigration = async () => {
+            document.getElementById('btn-run').disabled = true;
+            logEl().innerHTML = '';
+            stats = { copied: 0, skipped: 0, merged: 0, errors: 0 };
+            document.getElementById('progress-wrap').style.display = 'block';
+            document.getElementById('summary-grid').style.display = 'grid';
+            updateStats();
+            setProgress(0);
+
+            let oldDb, newDb;
+
+            // ── Step 1: Init & Auth entrambi i progetti ──────────────────────
+            logSection('Connessione');
+            try {
+                const oldApp = initializeApp(OLD_CONFIG, 'old-' + Date.now());
+                const newApp = initializeApp(NEW_CONFIG, 'new-' + Date.now());
+                oldDb = getFirestore(oldApp);
+                newDb = getFirestore(newApp);
+
+                await Promise.all([
+                    signInAnonymously(getAuth(oldApp)),
+                    signInAnonymously(getAuth(newApp))
+                ]);
+                log('  Autenticato su entrambi i progetti.', 'ok');
+            } catch(e) {
+                log('  ERRORE connessione: ' + e.message, 'err');
+                document.getElementById('btn-run').disabled = false;
+                return;
+            }
+            setProgress(10);
+
+            // ── Step 2: Leggi tutto dal vecchio DB ────────────────────────────
+            logSection('Lettura vecchio DB (booking-redazioni-cb450)');
+            let oldAllocs = [], oldSettingsLists = null, oldSettingsUsers = null;
+            try {
+                const snap = await getDocs(collection(oldDb, 'allocations'));
+                snap.forEach(d => oldAllocs.push({ _id: d.id, ...d.data() }));
+                log(`  allocations: ${oldAllocs.length} documenti trovati.`, 'ok');
+            } catch(e) {
+                log('  ERRORE lettura allocations: ' + e.message, 'err');
+                stats.errors++;
+            }
+            try {
+                const snap = await getDoc(doc(oldDb, 'settings', 'lists'));
+                if (snap.exists()) { oldSettingsLists = snap.data(); log('  settings/lists: ok.', 'ok'); }
+                else log('  settings/lists: non trovato.', 'warn');
+            } catch(e) { log('  ERRORE settings/lists: ' + e.message, 'err'); stats.errors++; }
+            try {
+                const snap = await getDoc(doc(oldDb, 'settings', 'users'));
+                if (snap.exists()) { oldSettingsUsers = snap.data(); log('  settings/users: ok.', 'ok'); }
+                else log('  settings/users: non trovato.', 'warn');
+            } catch(e) { log('  ERRORE settings/users: ' + e.message, 'err'); stats.errors++; }
+            setProgress(30);
+
+            // ── Step 3: Leggi dati completi dal nuovo DB ─────────────────────
+            logSection('Lettura nuovo DB (producionsuitefdl)');
+            // Mappa id → dati completi (serve per il merge slot-per-slot)
+            const newAllocDocs = new Map();
+            let newHasSettingsLists = false, newHasSettingsUsers = false;
+            try {
+                const snap = await getDocs(collection(newDb, 'allocations'));
+                snap.forEach(d => newAllocDocs.set(d.id, d.data()));
+                log(`  allocations esistenti: ${newAllocDocs.size} documenti.`, 'ok');
+            } catch(e) { log('  ERRORE lettura nuovo DB: ' + e.message, 'err'); stats.errors++; }
+            try {
+                const sl = await getDoc(doc(newDb, 'settings', 'lists'));
+                newHasSettingsLists = sl.exists();
+                log(`  settings/lists: ${newHasSettingsLists ? 'già presente' : 'non presente'}.`, newHasSettingsLists ? 'warn' : 'info');
+            } catch(e) { log('  ERRORE: ' + e.message, 'err'); stats.errors++; }
+            try {
+                const su = await getDoc(doc(newDb, 'settings', 'users'));
+                newHasSettingsUsers = su.exists();
+                log(`  settings/users: ${newHasSettingsUsers ? 'già presente' : 'non presente'}.`, newHasSettingsUsers ? 'warn' : 'info');
+            } catch(e) { log('  ERRORE: ' + e.message, 'err'); stats.errors++; }
+            setProgress(50);
+
+            // ── Step 4: Migra allocations (copia nuovi + merge slot esistenti) ─
+            logSection('Migrazione allocations');
+            let countNew = 0, countMerged = 0, countUnchanged = 0;
+
+            for (let i = 0; i < oldAllocs.length; i++) {
+                const { _id, ...oldData } = oldAllocs[i];
+                const oldSlots = oldData.slots || [];
+
+                if (!newAllocDocs.has(_id)) {
+                    // Documento assente nel nuovo → copia intero
+                    try {
+                        await setDoc(doc(newDb, 'allocations', _id), oldData);
+                        stats.copied++;
+                        countNew++;
+                        log(`  + COPIATO: ${_id} (${oldSlots.length} slot)`, 'ok');
+                    } catch(e) {
+                        log(`  ERRORE copia ${_id}: ${e.message}`, 'err');
+                        stats.errors++;
+                    }
+                } else {
+                    // Documento già presente → merge slot per slot (by time + contenuto)
+                    const newDocData = newAllocDocs.get(_id);
+                    const newSlotsMap = new Map((newDocData.slots || []).map(s => [s.time, s]));
+
+                    // Slot da aggiungere: non esistono nel nuovo DB
+                    const slotsToAdd = oldSlots.filter(s => s.time && !newSlotsMap.has(s.time));
+                    // Slot da aggiornare: esistono nel nuovo come booked:false ma nel vecchio sono booked:true
+                    const slotsToUpdate = oldSlots.filter(s => {
+                        if (!s.time || !s.booked) return false;
+                        const newS = newSlotsMap.get(s.time);
+                        return newS && !newS.booked;
+                    });
+
+                    const totalChanges = slotsToAdd.length + slotsToUpdate.length;
+                    if (totalChanges > 0) {
+                        try {
+                            // Ricostruisci array: aggiorna gli slot esistenti + aggiungi i nuovi
+                            const mergedSlots = (newDocData.slots || []).map(newS => {
+                                const upd = slotsToUpdate.find(s => s.time === newS.time);
+                                return upd ? upd : newS;
+                            });
+                            slotsToAdd.forEach(s => mergedSlots.push(s));
+
+                            await setDoc(doc(newDb, 'allocations', _id), { ...newDocData, slots: mergedSlots });
+                            stats.merged += totalChanges;
+                            countMerged++;
+                            if (slotsToUpdate.length > 0) {
+                                log(`  ~ MERGE: ${_id} (data: ${oldData.date || '?'}) → ${slotsToUpdate.length} slot recuperati, ${slotsToAdd.length} nuovi`, 'info');
+                                slotsToUpdate.forEach(s => log(`      · ${s.time} — ${s.info?.guest || '(vuoto)'} [status: "${s.info?.status || 'N/A'}"]`, 'dim'));
+                            }
+                            if (slotsToAdd.length > 0 && slotsToUpdate.length === 0) {
+                                log(`  ~ MERGE: ${_id} (data: ${oldData.date || '?'}) → aggiunti ${slotsToAdd.length} slot`, 'info');
+                            }
+                            slotsToAdd.forEach(s => log(`      + ${s.time} — ${s.info?.guest || '(vuoto)'} [status: "${s.info?.status || 'N/A'}"]`, 'dim'));
+                        } catch(e) {
+                            log(`  ERRORE merge ${_id}: ${e.message}`, 'err');
+                            stats.errors++;
+                        }
+                    } else {
+                        countUnchanged++;
+                        stats.skipped++;
+                    }
+                }
+
+                if (i % 5 === 0 || i === oldAllocs.length - 1) {
+                    setProgress(50 + Math.round(((i + 1) / oldAllocs.length) * 40));
+                    updateStats();
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            log(`\n  Riepilogo: ${countNew} nuovi copiati | ${countMerged} documenti con slot aggiunti | ${countUnchanged} invariati.`,
+                countNew + countMerged > 0 ? 'ok' : 'warn');
+            setProgress(90);
+            updateStats();
+
+            // ── Step 6: Settings ──────────────────────────────────────────────
+            logSection('Settings');
+            if (oldSettingsLists) {
+                if (newHasSettingsLists) {
+                    log('  settings/lists già presente nel nuovo DB → saltato.', 'warn');
+                    stats.skipped++;
+                } else {
+                    try {
+                        await setDoc(doc(newDb, 'settings', 'lists'), oldSettingsLists);
+                        stats.copied++;
+                        log('  settings/lists copiato.', 'ok');
+                    } catch(e) { log('  ERRORE settings/lists: ' + e.message, 'err'); stats.errors++; }
+                }
+            }
+            if (oldSettingsUsers) {
+                if (newHasSettingsUsers) {
+                    log('  settings/users già presente nel nuovo DB → saltato.', 'warn');
+                    stats.skipped++;
+                } else {
+                    try {
+                        await setDoc(doc(newDb, 'settings', 'users'), oldSettingsUsers);
+                        stats.copied++;
+                        log('  settings/users copiato.', 'ok');
+                    } catch(e) { log('  ERRORE settings/users: ' + e.message, 'err'); stats.errors++; }
+                }
+            }
+
+            // ── Fine ──────────────────────────────────────────────────────────
+            setProgress(100);
+            updateStats();
+            logSection('Completato');
+            if (stats.errors === 0) {
+                log(`  ✓ Sincronizzazione completata senza errori.`, 'ok');
+            } else {
+                log(`  ⚠ Completato con ${stats.errors} errori. Controlla il log sopra.`, 'err');
+            }
+            log(`  Copiati: ${stats.copied} | Saltati: ${stats.skipped} | Slot uniti: ${stats.merged} | Errori: ${stats.errors}`, 'info');
+
+            document.getElementById('btn-run').disabled = false;
+        };
+    </script>
+</body>
+</html>
